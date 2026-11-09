@@ -38,6 +38,9 @@ Les deux entités sans équivalent dans GreenFarm sont **RÉCOLTE** et **ALERTE*
 | ruche - alerte | une alerte concerne une seule ruche | une ruche a zéro, une ou plusieurs alertes |
 | coordinateur - récolte validée | une récolte est validée par au plus un coordinateur (aucun tant qu'elle n'est pas validée) | un coordinateur valide zéro, une ou plusieurs récoltes |
 | apicultrice - compte de connexion | une apicultrice a au plus un compte | un compte appartient au plus à une apicultrice (les comptes coordinateur, gestionnaire et admin n'en ont pas) |
+| coopérative - site | une coopérative est basée sur un seul site | un site accueille zéro, une ou plusieurs coopératives |
+| compte - site | un compte (de coordinateur) est affecté à au plus un site | un site a zéro, un ou plusieurs comptes affectés |
+| compte - récolte déclarée | une récolte est déclarée par un seul compte | un compte déclare zéro, une ou plusieurs récoltes |
 
 ## Question 4 · Ce que le sujet ne dit pas (hypothèses)
 
@@ -84,3 +87,44 @@ Lettres STRIDE utilisées : S, T, R, I, D, E (les 6).
 2. Le nom n'est **pas unique** (homonymes), il peut **changer** (mariage, faute de frappe), et c'est une donnée personnelle qu'on ne veut pas propager dans d'autres tables.
 3. Le rejeu d'une ancienne mesure de poids, c'est **T** (altération de l'intégrité des données), et souvent **S** aussi quand l'attaquant se fait passer pour le capteur.
 4. **1,1 du côté de RUCHE** (et 0,n du côté d'APICULTRICE).
+
+## Schéma relationnel
+
+Notation : clé primaire en **gras**, clé étrangère précédée de `#`.
+
+| Table | Clé primaire | Autres colonnes | Clés étrangères (vers quelle table) |
+|---|---|---|---|
+| site | **id** (code lisible : `SN-CASA`) | nom, pays, localite | — |
+| cooperative | **id** (uuid) | nom | #site_id (site) |
+| apicultrice | **id** (uuid) | nom, telephone | #site_id (site) |
+| ruche | **id** (uuid) | code (UNIQUE), latitude, longitude, date_installation | #site_id (site), #apicultrice_id (apicultrice) |
+| adhesion | **(apicultrice_id, cooperative_id)** | date_adhesion | #apicultrice_id (apicultrice), #cooperative_id (cooperative) |
+| utilisateur | **id** (uuid) | login, mot_de_passe_hash, role | #site_id (site), #apicultrice_id UNIQUE (apicultrice) |
+| mesure | **id** (bigint identity) ; UNIQUE (ruche_id, horodatage) | horodatage, poids_kg, temp_int_c, temp_ext_c, humidite_pct, activite_sonore_db, batterie_pct | #ruche_id (ruche) |
+| inspection | **id** (uuid) | date_inspection, etat_colonie, reine_presente, observations | #ruche_id (ruche) |
+| recolte | **id** (uuid) | date_recolte, quantite_kg, statut, date_validation | #ruche_id (ruche), #declaree_par (utilisateur), #validee_par (utilisateur) |
+| alerte | **id** (uuid) | type_alerte, date_alerte, niveau_confiance, statut | #ruche_id (ruche) |
+
+**10 tables, 14 clés étrangères.** Les règles appliquées :
+- **Règle 1** : chaque entité devient une table. Le site garde un code lisible (court, stable, pas secret). Tout ce que l'application exposera (ruches, personnes, comptes, récoltes) reçoit un UUID, car un numéro 1, 2, 3 se devine.
+- **Règle 2** : chaque lien 1,1 - 0,n devient une clé étrangère du côté 1,1 (`ruche.site_id`, `ruche.apicultrice_id`, `mesure.ruche_id`...).
+- **Règle 3** : le lien n,n ADHÈRE devient la table `adhesion`. Sa clé primaire réunit les deux clés étrangères, et la table porte `date_adhesion`.
+- **Règle 4** : le lien 0,1 - 0,1 entre l'apicultrice et son compte devient `utilisateur.apicultrice_id UNIQUE` : jamais deux comptes pour une apicultrice.
+- Les deux liens entre UTILISATEUR et RÉCOLTE (DÉCLARE, VALIDE) ne portent pas le nom de la table visée. Ils deviennent `declaree_par` et `validee_par`, qui pointent tous deux vers `utilisateur`.
+
+Les règles de sécurité posées dans `schema.sql` :
+- `mesure_anti_rejeu UNIQUE (ruche_id, horodatage)` empêche de rejouer une mesure.
+- `recolte_quantite_positive` interdit une quantité nulle ou négative.
+- `recolte_validation_tracee` garantit qu'une récolte validée ou refusée a toujours un validateur et une date, et qu'une récolte simplement déclarée n'en a pas.
+- `recolte_pas_auto_validation` empêche de valider sa propre récolte.
+- `alerte_confiance_bornee` limite le niveau de confiance entre 0 et 1.
+- Un compte de rôle « apicultrice » pointe obligatoirement vers une apicultrice, et un coordinateur a toujours un site.
+
+**Relancer `donnees.sql` une seconde fois, sans `schema.sql`** : le premier INSERT échoue avec `la valeur d'une clé dupliquée rompt la contrainte unique « site_pkey » ; la clé « (id)=(SN-CASA) » existe déjà`. Grâce à `BEGIN; ... COMMIT;`, toute la transaction est annulée. Rien n'est doublé : il y a toujours 11 ruches. Deux règles protègent la base : la **clé primaire de `site`**, un code lisible et donc stable d'un lancement à l'autre, et l'**atomicité de la transaction**. Le `UNIQUE` sur `ruche.code` et l'anti-rejeu des mesures bloqueraient aussi plus loin.
+
+### Testez-vous · Lab 2
+
+1. Dans la table du côté **1,1** : par exemple, la ruche porte `apicultrice_id`.
+2. Parce qu'une ligne d'association est identifiée par le **couple** (apicultrice, coopérative). Chaque colonne seule se répète : une apicultrice adhère à plusieurs coopératives. Le couple, lui, ne doit apparaître qu'une fois, sinon une même adhésion serait enregistrée deux fois.
+3. Elle protège contre le **rejeu** : renvoyer une ancienne mesure (même ruche, même instant) pour masquer une chute de poids est refusé (menace T).
+4. Parce que `ruche.site_id REFERENCES site(id)` exige que la table visée existe déjà au moment du `CREATE TABLE`.
