@@ -1,79 +1,133 @@
 # Dépendances fonctionnelles - Groupe Killian Morvan
 
-Table étudiée : `extrait_plat` (plat.sql), 528 lignes, 10 colonnes :
-`ruche_code, site_id, site_nom, pays, apicultrice, telephone, cooperative, horodatage, poids_kg, temp_int_c`.
+> **TP Jour 1 · Lab 4 · Livrable 3 (partie 1)**
+> Table étudiée : `extrait_plat` (créée par `plat.sql`), **528 lignes**, une par mesure
+> Fichiers liés : `plat.sql`, `contraintes.sql`
 
-## Les DF de extrait_plat
+Les 10 colonnes de `extrait_plat` :
 
-| DF | En français |
-|---|---|
-| site_id -> site_nom, pays | un site a un seul nom et un seul pays |
-| ruche_code -> site_id, telephone | une ruche est installée sur un seul site et appartient à une seule apicultrice (désignée par son téléphone) |
-| telephone -> apicultrice, cooperative | un téléphone désigne une seule apicultrice, et donc sa coopérative |
-| ruche_code, horodatage -> poids_kg, temp_int_c | une seule mesure par ruche et par instant (la règle anti-rejeu) |
+| ruche_code | site_id | site_nom | pays | apicultrice | telephone | cooperative | horodatage | poids_kg | temp_int_c |
+|---|---|---|---|---|---|---|---|---|---|
 
-Remarque : `telephone -> cooperative` n'est vraie que parce que, dans notre jeu d'essai, chaque apicultrice adhère à **une seule** coopérative. Le MCD autorise 1,n adhésions. Dès qu'une apicultrice adhérera à deux coopératives, chaque mesure apparaîtra deux fois dans `extrait_plat`, et cette DF tombera.
+## Sommaire
 
-On n'a **pas** `apicultrice -> telephone` : le nom ne détermine pas la personne (voir l'étape 4.3).
+1. [Les DF de extrait_plat](#1-les-df-de-extrait_plat)
+2. [Trois fermetures](#2-trois-fermetures)
+3. [La clé candidate](#3-la-clé-candidate)
+4. [Confrontation aux données](#4-confrontation-aux-données)
+5. [Identifier par le nom ?](#5-et-si-lapplication-identifiait-les-apicultrices-par-leur-nom-)
+6. [Testez-vous](#testez-vous--lab-4)
 
-## Fermeture de {site_id}
+---
 
-| Tour | DF utilisée | {site_id}⁺ |
+## 1. Les DF de extrait_plat
+
+| | DF | En français |
 |---|---|---|
-| 0 | aucune | {site_id} |
-| 1 | site_id -> site_nom, pays | + site_nom, pays |
+| **DF1** | `site_id → site_nom, pays` | un site a un seul nom et un seul pays |
+| **DF2** | `ruche_code → site_id, telephone` | une ruche est sur un seul site et a une seule apicultrice |
+| **DF3** | `telephone → apicultrice, cooperative` | un téléphone désigne une seule apicultrice, et donc sa coopérative |
+| **DF4** | `ruche_code, horodatage → poids_kg, temp_int_c` | une seule mesure par ruche et par instant |
+
+> ⚠️ **DF3 dépend du jeu d'essai.** `telephone → cooperative` n'est vraie que parce que chaque apicultrice adhère ici à **une seule** coopérative. Le MCD en autorise plusieurs (1,n) : dès qu'une apicultrice en aura deux, cette DF tombera.
+
+> ❌ **Pas de DF `apicultrice → telephone`** : le nom ne détermine pas la personne (voir la partie 4).
+
+## 2. Trois fermetures
+
+### {site_id}⁺
+
+| Tour | DF utilisée | Colonnes obtenues |
+|---|---|---|
+| 0 | — | site_id |
+| 1 | DF1 | + site_nom, pays |
 | 2 | plus rien ne s'ajoute | |
 
-**3 colonnes sur 10 : pas une clé.**
+**→ 3 colonnes sur 10 : pas une clé.**
 
-## Fermeture de {ruche_code}
+### {ruche_code}⁺
 
-| Tour | DF utilisée | {ruche_code}⁺ |
+| Tour | DF utilisée | Colonnes obtenues |
 |---|---|---|
-| 0 | aucune | {ruche_code} |
-| 1 | ruche_code -> site_id, telephone | + site_id, telephone |
-| 2 | site_id -> site_nom, pays ; telephone -> apicultrice, cooperative | + site_nom, pays, apicultrice, cooperative |
+| 0 | — | ruche_code |
+| 1 | DF2 | + site_id, telephone |
+| 2 | DF1, DF3 | + site_nom, pays, apicultrice, cooperative |
 | 3 | plus rien ne s'ajoute | |
 
-**7 colonnes sur 10 : pas une clé.** Il manque horodatage, poids_kg et temp_int_c : une ruche a 48 mesures.
+**→ 7 colonnes sur 10 : pas une clé.** Il manque `horodatage`, `poids_kg` et `temp_int_c`, car une ruche a 48 mesures.
 
-## Fermeture de {ruche_code, horodatage}
+### {ruche_code, horodatage}⁺
 
-| Tour | DF utilisée | {ruche_code, horodatage}⁺ |
+| Tour | DF utilisée | Colonnes obtenues |
 |---|---|---|
-| 0 | aucune | {ruche_code, horodatage} |
-| 1 | ruche_code, horodatage -> poids_kg, temp_int_c ; ruche_code -> site_id, telephone | + poids_kg, temp_int_c, site_id, telephone |
-| 2 | site_id -> site_nom, pays ; telephone -> apicultrice, cooperative | + site_nom, pays, apicultrice, cooperative |
+| 0 | — | ruche_code, horodatage |
+| 1 | DF4, DF2 | + poids_kg, temp_int_c, site_id, telephone |
+| 2 | DF1, DF3 | + site_nom, pays, apicultrice, cooperative |
 | 3 | plus rien ne s'ajoute | |
 
-**10 colonnes sur 10 : c'est une clé.**
+**→ 10 colonnes sur 10 : c'est une clé. ✅**
 
-## La clé candidate
+## 3. La clé candidate
 
-**{ruche_code, horodatage}** est la clé candidate de `extrait_plat`. Elle est minimale, on ne peut rien en retirer :
-- sans `horodatage`, {ruche_code}⁺ ne donne que 7 colonnes : il y a 48 lignes par ruche ;
-- sans `ruche_code`, {horodatage}⁺ = {horodatage} : à un même instant, les 11 ruches envoient chacune une mesure.
+> **Clé candidate : {ruche_code, horodatage}**
 
-Aucune autre colonne n'apparaît uniquement à gauche des DF. `horodatage` n'apparaît jamais à droite, donc toute clé le contient. `ruche_code` n'apparaît jamais à droite non plus. C'est donc la seule clé candidate.
+On ne peut rien en retirer :
 
-## Confrontation aux données (contraintes.sql)
+| Si on retire... | Il reste | Fermeture | Clé ? |
+|---|---|---|---|
+| `horodatage` | {ruche_code} | 7 colonnes sur 10 (48 lignes par ruche) | ❌ |
+| `ruche_code` | {horodatage} | 1 colonne sur 10 (11 ruches mesurent au même instant) | ❌ |
 
-Les 4 DF ont donné **0 ligne** de contradiction. La fausse DF `apicultrice -> telephone` renvoie **Aminata Diop, 2 téléphones**.
+C'est la **seule** clé candidate : `ruche_code` et `horodatage` n'apparaissent jamais à droite d'une DF, donc toute clé doit contenir les deux.
 
-Ce « 0 ligne » ne prouve pas que la DF est vraie. Il dit seulement que **ces données-ci** ne la contredisent pas : une DF est une règle métier, qui doit valoir pour toutes les données futures. La seule garantie, c'est une contrainte dans le schéma (clé primaire, UNIQUE).
+## 4. Confrontation aux données
 
-## Si l'application identifiait les apicultrices par leur nom ?
+Les requêtes sont dans `contraintes.sql`, sur le modèle :
+`SELECT X FROM extrait_plat GROUP BY X HAVING count(DISTINCT Y) > 1;`
 
-Les deux « Aminata Diop » (SN-CASA et SN-KOLD) seraient confondues :
-- **mauvais rattachements** : une mesure, une récolte ou une alerte attribuée à la mauvaise personne, et un paiement de récolte versé à la mauvaise apicultrice ;
-- **fuite de données (I)** : l'une verrait les ruches, donc les positions GPS, et le téléphone de l'autre ;
-- **usurpation (S) et répudiation (R)** : on ne peut pas savoir laquelle a déclaré ou validé, et chacune peut nier ;
-- **perte de données** : une mise à jour « WHERE nom = 'Aminata Diop' » modifierait ou supprimerait les deux.
+| DF testée | Attendu | Obtenu |
+|---|---|---|
+| DF1 `site_id → site_nom, pays` | 0 ligne | ✅ 0 ligne |
+| DF2 `ruche_code → site_id, telephone` | 0 ligne | ✅ 0 ligne |
+| DF3 `telephone → apicultrice, cooperative` | 0 ligne | ✅ 0 ligne |
+| DF4 `ruche_code, horodatage → poids_kg, temp_int_c` | 0 ligne | ✅ 0 ligne |
+| fausse DF `apicultrice → telephone` | Aminata Diop | ❌ **Aminata Diop, 2 téléphones** |
 
-C'est exactement ce qui s'est passé avec les logins `a.diop` (3 comptes pour 3 personnes). On identifie une personne par un identifiant attribué (UUID). Une donnée métier unique (téléphone, login) se protège par une contrainte UNIQUE.
+> « 0 ligne » ne prouve pas qu'une DF est vraie. Cela veut dire que **ces données-ci** ne la contredisent pas. Seule une contrainte dans le schéma (clé primaire, UNIQUE) la garantit pour l'avenir.
+
+### Les logins (étape 4.4)
+
+| # | Commande | Résultat |
+|---|---|---|
+| 1 | logins en double | `a.diop` × 3 |
+| 2 | `UNIQUE (login)` | ❌ refusée : doublons |
+| 3 | 3 `UPDATE` (`aminata.diop.casa`, `aminata.diop.kold`, `awa.diop`) | ✅ |
+| 4 | `UNIQUE (login)` | ✅ acceptée |
+| 5 | insérer `Awa.Diop` | ✅ acceptée : le piège des majuscules |
+| 6 | index unique sur `lower(login)`, puis `Awa.Diop` | ❌ refusée |
+
+## 5. Et si l'application identifiait les apicultrices par leur nom ?
+
+Les deux « Aminata Diop » (SN-CASA et SN-KOLD) seraient **confondues** :
+
+| Conséquence | STRIDE |
+|---|---|
+| Une mesure, une récolte ou un paiement attribué à la mauvaise personne | T |
+| L'une voit les ruches (GPS) et le téléphone de l'autre | I |
+| On ne sait plus laquelle a déclaré ou validé, et chacune peut nier | S, R |
+| Un `UPDATE … WHERE nom = 'Aminata Diop'` modifie les deux | T |
+
+C'est exactement ce qui s'est passé avec les trois logins `a.diop`.
+
+> **À retenir :** on identifie une personne par un identifiant attribué (UUID). Une donnée métier unique (téléphone, login) se protège par une contrainte UNIQUE.
+
+---
 
 ## Testez-vous · Lab 4
 
-1. `site_id -> pays` : si je connais le site, je connais son pays. Deux lignes qui ont le même `site_id` ont forcément le même `pays`.
-2. Parce que sa fermeture ne contient que 7 colonnes sur 10 : `ruche_code` ne détermine ni `horodatage` ni la mesure. Une ruche a 48 lignes dans `extrait_plat`.
-3. Parce qu'une DF est une règle sur **toutes** les données possibles, pas seulement sur celles d'aujourd'hui. 0 ligne veut dire « pas encore contredite ». Demain, une saisie peut la violer si aucune contrainte ne l'interdit.
+1. **Que veut dire `site_id → pays` ?**
+   Si je connais le site, je connais son pays. Deux lignes qui ont le même `site_id` ont forcément le même `pays`.
+2. **Pourquoi `{ruche_code}` n'est-il pas une clé ?**
+   Sa fermeture ne donne que 7 colonnes sur 10 : une ruche a 48 lignes, une par mesure.
+3. **Pourquoi « 0 ligne » ne prouve-t-il pas qu'une DF est vraie ?**
+   Une DF est une règle sur **toutes** les données possibles. 0 ligne veut seulement dire « pas encore contredite ».
