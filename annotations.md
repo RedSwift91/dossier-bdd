@@ -122,6 +122,12 @@ Les règles de sécurité posées dans `schema.sql` :
 
 **Relancer `donnees.sql` une seconde fois, sans `schema.sql`** : le premier INSERT échoue avec `la valeur d'une clé dupliquée rompt la contrainte unique « site_pkey » ; la clé « (id)=(SN-CASA) » existe déjà`. Grâce à `BEGIN; ... COMMIT;`, toute la transaction est annulée. Rien n'est doublé : il y a toujours 11 ruches. Deux règles protègent la base : la **clé primaire de `site`**, un code lisible et donc stable d'un lancement à l'autre, et l'**atomicité de la transaction**. Le `UNIQUE` sur `ruche.code` et l'anti-rejeu des mesures bloqueraient aussi plus loin.
 
+### Étape 2.4 · La base dans pgAdmin
+
+- **Tables** : Databases > queenbee > Schemas > public > Tables affiche les 10 tables du schéma (plus `extrait_plat`, créée au lab 4). View/Edit Data > All Rows sur `ruche` affiche les 11 ruches avec leurs UUID.
+- **ERD For Database** : chaque association du MCD est un trait entre deux tables. ADHÈRE est devenue la table `adhesion`, reliée à `apicultrice` et à `cooperative`. On retrouve le MCD (avec, en plus, les 4 tables du schéma `norm` du lab 5).
+- **Query Tool** : `SELECT conrelid::regclass AS table_, confrelid::regclass AS pointe_vers, conname FROM pg_constraint WHERE contype = 'f' ORDER BY 1, 2;` renvoie les **14 clés étrangères du schéma public**, toutes nommées en `_fk` (cooperative_site_fk, apicultrice_site_fk, ruche_site_fk, ruche_apicultrice_fk, adhesion_cooperative_fk, adhesion_apicultrice_fk, utilisateur_site_fk, utilisateur_apicultrice_fk, mesure_ruche_fk, inspection_ruche_fk, recolte_ruche_fk, recolte_declaree_par_fk, recolte_validee_par_fk, alerte_ruche_fk). Lancée après le lab 5, elle affiche 17 lignes : les 3 autres sont les clés étrangères des tables `norm`.
+
 ### Testez-vous · Lab 2
 
 1. Dans la table du côté **1,1** : par exemple, la ruche porte `apicultrice_id`.
