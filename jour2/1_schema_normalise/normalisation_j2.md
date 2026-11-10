@@ -174,7 +174,7 @@ Chaque apicultrice n'a de ruches que sur son site ✅. Mais les données ne suff
 
 > **Remarque 2 : règle métier ou coïncidence ?** Le cahier des charges dit qu'une apicultrice « est rattachée à un site », et que le coordinateur valide les récoltes **de son site**. On en fait une **règle métier** : une apicultrice n'a de ruches que sur son site. Alors `ruche.site_id` est une **copie** de `apicultrice.site_id`, et `ruche.apicultrice_id → ruche.site_id` est une DF qui ne part pas d'une clé : `ruche` n'est pas vraiment en BCNF. De même, `utilisateur.site_id` recopie le site de l'apicultrice.
 >
-> **Qu'est-ce qui garantit la cohérence dans notre schéma ? Rien, au départ.** Une ruche pourrait être déplacée sur SN-KOLD tout en restant à une apicultrice de SN-CASA : le coordinateur de SN-KOLD validerait alors ses récoltes, celui de SN-CASA ne les verrait plus. On garde la colonne (elle sert à toutes les requêtes par site), mais on la **contrôle** par une clé étrangère composée `(apicultrice_id, site_id) REFERENCES apicultrice (id, site_id)`. Correction prévue lors de la revue de sécurité.
+> **Qu'est-ce qui garantit la cohérence dans notre schéma ? Rien, au départ.** Une ruche pourrait être déplacée sur SN-KOLD tout en restant à une apicultrice de SN-CASA : le coordinateur de SN-KOLD validerait alors ses récoltes, celui de SN-CASA ne les verrait plus. On garde la colonne (elle sert à toutes les requêtes par site), mais on la **contrôle** par une clé étrangère composée `(apicultrice_id, site_id) REFERENCES apicultrice (id, site_id)`. Correction ajoutée au lab 10 (`corrections.sql`, constat R4).
 
 ## Testez-vous · Lab 6
 

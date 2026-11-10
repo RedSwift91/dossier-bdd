@@ -1,2 +1,4 @@
 *.dump
+*.zip
 *.odt
+.~lock.*
