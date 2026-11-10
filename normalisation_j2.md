@@ -178,3 +178,95 @@ Chaque apicultrice n'a de ruches que sur son site ✅. Mais les données ne suff
    Sans elle, la ligne cherchée peut être **la même** que celle qu'on écrit : lors d'un `UPDATE` (la ligne est encore dans la table) ou d'un doublon exact, le trigger trouverait « un formateur pour ce thème »... qui est le même, et refuserait à tort. On ne cherche qu'un **autre** formateur.
 4. **Un avantage et un inconvénient de rester en 3NF plutôt que de passer en BCNF ?**
    Avantage : toutes les DF restent garanties par des clés, sans trigger (qui peut être contourné par deux insertions simultanées). Inconvénient : la redondance reste (`formateur → theme` recopié), d'où l'anomalie de mise à jour de l'étape 6.1.
+
+---
+
+# Lab 7 · Dénormaliser, en connaissance de cause
+
+## 7.1 · Mesurer avant de copier
+
+`volume.sql` ajoute 90 jours de mesures (du 2026-12-14 au 2027-03-13, juste avant le jeu d'essai du 2027-03-14) : **`INSERT 0 47520`** ✅ (11 ruches × 4 320). Lancé une seule fois : relancé, il serait refusé par `mesure_anti_rejeu`.
+
+Le tableau de bord du gestionnaire (UC-G01), SN-CASA, les 3 derniers jours :
+
+| jour | nb_mesures | poids_moyen | poids_min | batterie_min |
+|---|---|---|---|---|
+| 2027-03-14 | 192 | 37.51 | 30.06 | 53 |
+| 2027-03-13 | 192 | 32.54 | 30.09 | 90 |
+| 2027-03-12 | 192 | 32.54 | 30.01 | 90 |
+
+192 mesures par jour = 4 ruches × 48 ✅. **Execution Time : 6,826 ms** (lecture de toute la table `mesure`, 48 048 lignes, *Seq Scan*).
+
+## 7.2 · La synthèse, et son prix
+
+| Lecture | Plan | Execution Time |
+|---|---|---|
+| requête sur `mesure` (7.1) | Seq Scan sur 48 048 mesures + Hash Join | **6,826 ms** |
+| vue matérialisée `synthese_site_jour` | Bitmap Index Scan sur `synthese_site_jour_pk` | **0,110 ms** ✅ (60 fois moins) |
+
+Les chiffres sont les mêmes.
+
+### Le vol invisible
+
+Le 15 mars à 6 h, la ruche SN-CASA-021 passe à **8,40 kg** (25 kg de moins : un vol, UC-CY04).
+
+| Moment | Ce que montre la synthèse pour SN-CASA |
+|---|---|
+| après l'`INSERT`, avant le rafraîchissement | 2027-03-14 et avant : **rien d'anormal** |
+| après `REFRESH MATERIALIZED VIEW CONCURRENTLY` | **2027-03-15 \| 1 mesure \| poids_min = 8.40** |
+
+- **Si la vue n'est rafraîchie que la nuit, combien de temps le vol reste-t-il invisible ?** Jusqu'au prochain rafraîchissement : un vol à 6 h n'apparaît que la nuit suivante, soit **près de 24 h** au pire. Largement le temps d'emporter la ruche.
+- **Où détecter un vol ?** Sur les **mesures brutes**, à leur arrivée (une requête ou un trigger sur `mesure` qui compare au poids précédent et crée une `alerte`). La synthèse sert au pilotage, jamais à la sécurité.
+
+## 7.3 · L'export pour le bailleur
+
+### Un haché simple se casse
+
+`sha256('+221 77 000 01 02')` = `f7bda31fa5df1fde3bd29cc7a93d88ccd1b9b1e5de6a5a6af5cd1d866827c7b5`
+
+En essayant le million de numéros qui commencent par `+221 77 0`, la base retrouve **`+221 77 000 01 02`** en **941 ms** (`\timing on`). Un haché sans clé ne protège rien : l'espace des téléphones est trop petit.
+
+### Le bon export : `v_export_bailleur`
+
+Pseudonyme = HMAC-SHA256 de l'`id` de l'apicultrice avec une clé secrète de 32 octets aléatoires, gardée dans `cle_pseudonymisation` (une seule ligne, `REVOKE ALL ... FROM PUBLIC`).
+
+```text
+ apicultrice_pseudo |     pays      | site_id | latitude | longitude | recolte_validee_kg
+--------------------+---------------+---------+----------+-----------+--------------------
+ 389992473206       | Cameroun      | CM-NGAO |      7.3 |      13.6 |                  0
+ bf5f86ca44a6       | Cameroun      | CM-NGAO |      7.3 |      13.6 |                  0
+ 9daa00d7e1cc       | Côte d'Ivoire | CI-KORH |      9.5 |      -5.6 |                  0
+ cbcfeaf1d2e4       | Côte d'Ivoire | CI-KORH |      9.5 |      -5.6 |                  0
+ 5bae0561b18b       | Sénégal       | SN-CASA |     12.6 |     -16.3 |              20.70
+ d7179118ac6b       | Sénégal       | SN-CASA |     12.6 |     -16.3 |                  0
+ c7a9cfea08b6       | Sénégal       | SN-KOLD |     12.9 |     -15.0 |                  0
+ f5b04c2d9df8       | Sénégal       | SN-KOLD |     12.9 |     -14.9 |                  0
+```
+
+**8 lignes pour 11 ruches** ✅ (les ruches proches d'une même apicultrice se regroupent), sans nom ni téléphone. La clé est-elle écrite dans la définition de la vue ? **`f`** ✅ (la vue lit la table, elle ne contient pas la clé).
+
+### Les colonnes retirées
+
+| Colonne retirée | Pourquoi |
+|---|---|
+| `apicultrice.nom` | identifie directement la personne |
+| `apicultrice.telephone` | identifie **et** permet de la contacter (ou de l'hameçonner) |
+| `apicultrice.id` | stable et présent partout dans la base : remplacé par un HMAC, illisible sans la clé |
+| `ruche.code` | relie la ligne à une ruche précise, donc à son apicultrice |
+| `latitude`, `longitude` à 5 décimales (~1 m) | mènent à la ruche, et souvent au domicile : risque de vol. Arrondies à 0,1° (~11 km) |
+| `date_installation`, détail des mesures, dates des récoltes | inutiles au bailleur, et chaque détail en plus aide à ré-identifier par recoupement |
+
+## 7.4 · Le journal d'audit, une copie voulue
+
+`denormalisation.sql` a été relancé deux fois sans erreur. Le journal et la clé sont créés avec `IF NOT EXISTS` : les relancer **n'efface pas** les preuves, et **ne change pas** la clé (sinon tous les pseudonymes déjà transmis changeraient).
+
+1. **Pourquoi `ligne_id` n'est-il pas une clé étrangère vers la récolte ?** Une clé étrangère empêcherait de supprimer la récolte (RESTRICT), ou effacerait la trace avec elle (CASCADE). Or le journal doit justement **survivre** à la suppression : c'est là qu'il sert de preuve. Et le même journal surveille plusieurs tables (`recolte`, `utilisateur`) : une seule colonne ne peut pas pointer vers toutes.
+2. **`avant` et `apres` recopient des lignes entières : est-ce acceptable ?** Oui : c'est une copie **voulue**, figée, jamais modifiée (ajout seul), qui montre la ligne **telle qu'elle était à ce moment**. La normalisation évite les copies qui peuvent diverger ; une photo datée ne diverge pas. Le prix : le journal contient des données personnelles, d'où l'accès réservé à l'admin et une durée de conservation à fixer.
+3. **Pourquoi `clock_timestamp()` et pas `now()` ?** Dans une transaction, `now()` donne l'heure du **début** de la transaction : toutes les actions d'une longue transaction auraient la même heure, et l'ordre réel serait perdu. `clock_timestamp()` donne l'heure **réelle** de chaque écriture.
+
+## Testez-vous · Lab 7
+
+1. **Vue ou vue matérialisée ?** Une vue est une requête enregistrée, recalculée à chaque lecture : toujours à jour, mais lente. Une vue matérialisée stocke son résultat : rapide, mais **en retard** jusqu'au prochain `REFRESH`.
+2. **`md5(nom)` comme pseudonyme : deux raisons de refuser.** (a) Sans clé, il se casse par dictionnaire : il suffit de hacher la liste des noms de la région. (b) Le nom n'identifie pas : les deux Aminata Diop auraient le **même** pseudonyme et seraient fusionnées. (En plus, md5 est cassé.)
+3. **`v_export_bailleur` est-elle soumise au RGPD ?** **Oui.** Des données pseudonymisées restent des données personnelles : celui qui a la clé peut retrouver la personne, et le recoupement (un site, une zone de 11 km, un total de récolte) peut suffire à la reconnaître dans un petit village.
+4. **Pourquoi le journal n'a-t-il pas de clé étrangère vers la table surveillée ?** Pour qu'il survive à la suppression de la ligne (ni blocage, ni effacement en cascade de la preuve), et parce qu'il surveille plusieurs tables.
