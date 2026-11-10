@@ -13,6 +13,10 @@
 
 Les 8 vues : `v_moi`, `v_mes_ruches`, `v_mes_mesures`, `v_mes_recoltes`, `v_carte_ruches` (apicultrice) ; `v_ruches_site`, `v_recoltes_site` (coordinateur) ; `v_export_bailleur` (gestionnaire, avec la vue matérialisée `synthese_site_jour`).
 
+## Les captures
+
+Toutes les captures d'écran des Labs 6 à 10, avec les réponses demandées : [`captures/CAPTURES.md`](captures/CAPTURES.md).
+
 ## Reconstruire (après la base du jour 1, avec -v ON_ERROR_STOP=1)
 
 Base du jour 1, depuis `dossier-bdd` : `schema.sql`, `donnees.sql`, `plat.sql`, puis `contraintes.sql` **sans** `ON_ERROR_STOP` (il pose l'unicité des logins du lab 4, et contient exactement 2 refus voulus : `utilisateur_login_unique` avant nettoyage, `utilisateur_login_ci` pour `Awa.Diop`).
